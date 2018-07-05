@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+require 5.003;
+BEGIN { $ENV{PATH} = '/bin' }
+use Socket;
+use POSIX;
+use strict;
+#Based on check_all_disks.pl, written by James Hamilton.
+
+my $TIMEOUT = 15;
+my $port = 1040;
+
+my %ERRORS = ('UNKNOWN', '-1',
+                'OK', '0',
+                'WARNING', '1',
+                'CRITICAL', '2');
+
+
+my $startime = localtime();
+my $remote = shift || &usage(%ERRORS);
+my $remoteaddr = inet_aton("$remote");
+my $paddr = sockaddr_in($port, $remoteaddr) || die "Can't create info for connection: #!\n";;
+my $proto = getprotobyname('tcp');
+socket(Server, PF_INET, SOCK_STREAM, $proto) || die "Can't create socket: $!";
+connect(Server, $paddr) || die "Can't connect to server: $!";
+
+$SIG{'ALRM'} = sub {
+     close(Server);
+     select(STDOUT);
+     print "No Answer from Client\n";
+     exit $ERRORS{"CRITICAL"};
+};
+alarm($TIMEOUT);
+select(Server);
+$| = 1;
+print Server "raid_monitor\n";
+#print Server "halt\n";
+my $serveranswer = <Server>;
+alarm(0);
+select(STDOUT);
+close(Server);
+if ($serveranswer =~ /critical/i) {
+	print "$serveranswer\n";
+	exit $ERRORS{"CRITICAL"};
+} elsif ($serveranswer =~ /warning/i) {
+	print "$serveranswer\n";
+	exit $ERRORS{"WARNING"};
+} elsif ($serveranswer =~ /ok/i) {
+	print "$serveranswer\n";
+	exit $ERRORS{"OK"};
+}
+
+
+
+
+
+
+sub usage
+  {
+  print "Must specify an IP address\n";
+  exit $ERRORS{"UNKNOWN"};
+}
